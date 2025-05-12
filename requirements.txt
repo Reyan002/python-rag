@@ -1,0 +1,4 @@
+streamlit
+langchain>=0.1.0
+langchain-community>=0.0.6
+pypdf
