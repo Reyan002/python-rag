@@ -4,7 +4,7 @@ st.set_page_config(page_title="📚 PDF Chatbot", layout="wide")
 import os
 import platform
 import tempfile
-from langchain.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import FAISS
@@ -14,8 +14,8 @@ from groq import Groq
 from typing import Optional, List
 
 # === Python version warning ===
-if platform.python_version().startswith("3.13"):
-    st.warning("⚠️ Python 3.13 is experimental. Prefer Python 3.10 or 3.11.")
+# if platform.python_version().startswith("3.13"):
+    # st.warning("⚠️ Python 3.13 is experimental. Prefer Python 3.10 or 3.11.")
 
 # === Set Groq API Key ===
 GROQ_API_KEY = "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"
