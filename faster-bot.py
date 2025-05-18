@@ -1,21 +1,14 @@
 import streamlit as st
-st.set_page_config(page_title="📚 PDF Chatbot", layout="wide")
-
 import os
-import platform
-import tempfile
+import time
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import CharacterTextSplitter
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain.llms.base import LLM
 from groq import Groq
 from typing import Optional, List
-
-# === Python version warning ===
-# if platform.python_version().startswith("3.13"):
-    # st.warning("⚠️ Python 3.13 is experimental. Prefer Python 3.10 or 3.11.")
 
 # === Set Groq API Key ===
 GROQ_API_KEY = "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"
@@ -49,53 +42,52 @@ class GroqLLM(LLM):
         return response.choices[0].message.content
 
 # === Streamlit App ===
-st.title("🤖 Real-time Chatbot for Your PDF")
+st.set_page_config(page_title="📚 Folder PDF Chatbot", layout="wide")
+st.title("📂 Auto-Load PDF Chatbot from Folder")
 
-# Chat history state
+# Session state
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Upload PDF
-uploaded_file = st.file_uploader("📄 Upload your PDF", type="pdf")
+# Hardcoded folder path
+FOLDER_PATH = r"C:\Users\ART\Desktop\Content"
 
-if uploaded_file:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-        tmp_file.write(uploaded_file.read())
-        pdf_path = tmp_file.name
+@st.cache_data(show_spinner=True)
+def load_and_process_folder(folder_path: str):
+    all_docs = []
+    for file in os.listdir(folder_path):
+        if file.endswith(".pdf"):
+            loader = PyPDFLoader(os.path.join(folder_path, file))
+            docs = loader.load()
+            all_docs.extend(docs)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    return splitter.split_documents(all_docs)
 
-    # Load, split, and embed PDF
-    loader = PyPDFLoader(pdf_path)
-    documents = loader.load()
-
-    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    docs = text_splitter.split_documents(documents)
-
-    embeddings = HuggingFaceEmbeddings(
-        model_name="all-MiniLM-L6-v2",
-        model_kwargs={"device": "cpu"}  # Use "cuda" for GPU
-    )
-
-    vectorstore = FAISS.from_documents(docs, embeddings)
-    retriever = vectorstore.as_retriever()
-
-    llm = GroqLLM()
-    qa = RetrievalQA.from_chain_type(llm=llm, retriever=retriever, chain_type="stuff")
-
-    st.success("✅ PDF processed. You can now chat below.")
+if os.path.exists(FOLDER_PATH):
+    with st.spinner("🔄 Processing folder... please wait..."):
+        start = time.time()
+        documents = load_and_process_folder(FOLDER_PATH)
+        embeddings = HuggingFaceEmbeddings(
+            model_name="all-MiniLM-L6-v2", model_kwargs={"device": "cpu"}
+        )
+        vectorstore = FAISS.from_documents(documents, embeddings)
+        retriever = vectorstore.as_retriever()
+        llm = GroqLLM()
+        qa = RetrievalQA.from_chain_type(llm=llm, retriever=retriever, chain_type="stuff")
+        st.session_state.qa = qa
+        st.success(f"✅ Loaded {len(documents)} chunks from folder in {round(time.time()-start, 2)}s")
 
     # Chat input
-    user_input = st.chat_input("Ask a question about the PDF...")
-
+    user_input = st.chat_input("Ask something about your documents...")
     if user_input:
         try:
-            # Run LLM
-            answer = qa.run(user_input)
-
-            # Save to session state
+            answer = st.session_state.qa.run(user_input)
             st.session_state.chat_history.append(("user", user_input))
             st.session_state.chat_history.append(("bot", answer))
         except Exception as e:
             st.error(f"❌ Error: {e}")
+else:
+    st.error("🚫 Folder path not found. Make sure the folder exists on this machine.")
 
 # Display chat history
 for role, message in st.session_state.get("chat_history", []):
